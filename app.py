@@ -13,7 +13,8 @@ import llm
 import tts
 import session_manager as sm
 
-app = Flask(__name__, static_folder="static")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app = Flask(__name__, static_folder=os.path.join(BASE_DIR, "static"))
 CORS(app)
 
 ESCALATION_KEYWORDS = [
@@ -28,7 +29,10 @@ GOODBYE_TEXT = "Thank you for calling the Institute of Space Technology. Goodbye
 
 @app.route("/")
 def index():
-    return send_from_directory("static", "index.html")
+    path = os.path.join(BASE_DIR, "static", "index.html")
+    if os.path.isfile(path):
+        return send_from_directory(os.path.join(BASE_DIR, "static"), "index.html")
+    return jsonify({"error": "index.html not found"}), 404
 
 
 @app.route("/health")
