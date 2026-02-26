@@ -4,7 +4,7 @@ Text-to-Speech via Edge TTS. Generates MP3 files with unique names per session.
 
 import os, uuid, asyncio
 
-AUDIO_DIR = os.path.join(os.path.dirname(__file__), "static", "audio")
+AUDIO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "audio")
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
 VOICE = "en-US-JennyNeural"

@@ -5,7 +5,7 @@ Session and logging management for concurrent callers.
 import os, json, re, threading, time, uuid
 from datetime import datetime
 
-LOGS_DIR = os.path.join(os.path.dirname(__file__), "logs")
+LOGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 os.makedirs(LOGS_DIR, exist_ok=True)
 
 _sessions: dict[str, dict] = {}
@@ -118,7 +118,7 @@ def get_metrics(session_id: str) -> dict:
         if not sess:
             return {}
         start = datetime.fromisoformat(sess["start_time"])
-        end = datetime.fromisoformat(sess["end_time"]) if sess["end_time"] else datetime.utcnow()
+        end = datetime.fromisoformat(sess["end_time"]) if sess["end_time"] else datetime.utcnow()()
         duration = (end - start).total_seconds()
         return {
             "call_duration_seconds": round(duration, 1),
