@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>IST Admissions — AI Calling Agent</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -346,35 +349,50 @@
     }
 
     async function startCall() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStatus('Your browser does not support microphone access. Try Chrome or Edge.');
+        return;
+      }
+
       try {
         startBtn.disabled = true;
-        setStatus('Starting call...');
+        setStatus('Requesting microphone...');
 
         let stream;
         try {
           stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         } catch (micErr) {
-          console.error('Mic error:', micErr);
-          setStatus('Microphone access denied. Please allow mic and refresh the page.');
+          console.error('Mic error:', micErr.name, micErr.message);
+          var msg = 'Microphone blocked. ';
+          if (micErr.name === 'NotAllowedError' || micErr.name === 'PermissionDeniedError') {
+            msg += 'Click the lock or info icon next to the URL → set Microphone to Allow → reload this page, then click Start again.';
+          } else if (micErr.name === 'NotFoundError') {
+            msg += 'No microphone found. Connect a mic and try again.';
+          } else {
+            msg += 'Please allow mic in browser settings, reload, and try again.';
+          }
+          setStatus(msg);
           startBtn.disabled = false;
           return;
         }
         window._micStream = stream;
 
+        setStatus('Connecting...');
+
         const resp = await fetch(`${API}/api/start`, { method: 'POST' });
         if (!resp.ok) {
-          const msg = resp.status === 502 || resp.status === 503
-            ? 'Server is starting up. Wait 30–60 seconds and try again.'
-            : 'Server error. Please try again in a moment.';
-          setStatus(msg);
-          stream.getTracks().forEach(t => t.stop());
+          var errMsg = resp.status === 502 || resp.status === 503
+            ? 'Server is starting. Wait 30–60 seconds and try again.'
+            : 'Server error. Try again in a moment.';
+          setStatus(errMsg);
+          stream.getTracks().forEach(function(t) { t.stop(); });
           startBtn.disabled = false;
           return;
         }
         const data = await resp.json();
         if (data.error) {
-          setStatus('Error: ' + (data.error || 'Please try again.'));
-          stream.getTracks().forEach(t => t.stop());
+          setStatus('Error: ' + (data.error || 'Try again.'));
+          stream.getTracks().forEach(function(t) { t.stop(); });
           startBtn.disabled = false;
           return;
         }
@@ -393,7 +411,7 @@
       } catch (err) {
         console.error('Start call error:', err);
         if (window._micStream) {
-          window._micStream.getTracks().forEach(t => t.stop());
+          window._micStream.getTracks().forEach(function(t) { t.stop(); });
           window._micStream = null;
         }
         setStatus('Could not start call. Check your connection and try again.');
