@@ -18,12 +18,23 @@ _idf = {}
 _vocab = []
 
 
-def _chunk_text(text, title, max_chars=800):
+def _chunk_text(text, title, max_chars=500):
     paragraphs = re.split(r"\n{2,}", text.strip())
     chunks = []
     buf = ""
     for p in paragraphs:
-        if len(buf) + len(p) + 2 > max_chars and buf:
+        p = p.strip()
+        if not p:
+            continue
+        if len(p) > max_chars:
+            sentences = re.split(r"(?<=[.?!])\s+", p)
+            for s in sentences:
+                if len(buf) + len(s) + 2 > max_chars and buf:
+                    chunks.append({"text": buf.strip(), "title": title})
+                    buf = s + " "
+                else:
+                    buf += s + " "
+        elif len(buf) + len(p) + 2 > max_chars and buf:
             chunks.append({"text": buf.strip(), "title": title})
             buf = p + "\n\n"
         else:
@@ -145,28 +156,39 @@ def init_kb():
     _build_tfidf()
 
 
-def search(query, top_k=8):
+MAX_CONTEXT_CHARS = 3000
+
+
+def search(query, top_k=5):
     results = []
 
-    tfidf_results = _tfidf_search(query, top_k=6)
+    tfidf_results = _tfidf_search(query, top_k=4)
     for r in tfidf_results:
         results.append(r)
 
-    kw_results = _keyword_search(query, top_k=5)
+    kw_results = _keyword_search(query, top_k=3)
     seen_texts = set()
     for r in results:
-        seen_texts.add(r["text"][:100])
+        seen_texts.add(r["text"][:80])
     for kw in kw_results:
-        if kw["text"][:100] not in seen_texts:
+        if kw["text"][:80] not in seen_texts:
             results.append(kw)
-            seen_texts.add(kw["text"][:100])
+            seen_texts.add(kw["text"][:80])
 
     if not results:
         fallback_q = "admission programs fee merit IST eligibility"
-        results = _keyword_search(fallback_q, top_k=4)
+        results = _keyword_search(fallback_q, top_k=3)
 
     results = results[:top_k]
     context_parts = []
+    total_len = 0
     for r in results:
-        context_parts.append("[{}]\n{}".format(r["title"], r["text"]))
+        part = "[{}]\n{}".format(r["title"], r["text"])
+        if total_len + len(part) > MAX_CONTEXT_CHARS:
+            remaining = MAX_CONTEXT_CHARS - total_len
+            if remaining > 100:
+                context_parts.append(part[:remaining])
+            break
+        context_parts.append(part)
+        total_len += len(part) + 6
     return "\n\n---\n\n".join(context_parts) if context_parts else "No relevant information found in the knowledge base."

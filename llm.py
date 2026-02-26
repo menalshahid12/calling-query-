@@ -38,37 +38,56 @@ TECHNICAL_ISSUE_PATTERNS = [
 ]
 
 
+def _build_history_summary(conversation_history):
+    """Build a compact summary of recent conversation so the LLM has
+    follow-up context without blowing the token budget.
+    Keep last 4 turns verbatim, summarize older ones as one-liners."""
+    if not conversation_history:
+        return ""
+
+    lines = []
+    total = len(conversation_history)
+
+    older = conversation_history[:-4] if total > 4 else []
+    recent = conversation_history[-4:] if total > 4 else conversation_history
+
+    if older:
+        summary_parts = []
+        for t in older[-6:]:
+            q = t.get("user", "")[:60]
+            a = t.get("assistant", "")[:60]
+            summary_parts.append("Q: {} -> A: {}".format(q, a))
+        lines.append("Earlier in this call:\n" + "\n".join(summary_parts))
+
+    for t in recent:
+        lines.append("Caller: {}".format(t.get("user", "")))
+        lines.append("Agent: {}".format(t.get("assistant", "")))
+
+    return "\n".join(lines)
+
+
 def generate_answer(user_query, context, conversation_history):
     from groq import Groq
 
     client = Groq(api_key=GROQ_API_KEY)
 
-    recent_history = conversation_history[-6:] if len(conversation_history) > 6 else conversation_history
-
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-    for turn in recent_history:
-        messages.append({"role": "user", "content": turn.get("user", "")})
-        if turn.get("assistant"):
-            messages.append({"role": "assistant", "content": turn["assistant"]})
+    history_text = _build_history_summary(conversation_history)
 
-    user_content = """Context from IST knowledge base:
----
-{}
----
-
-Caller's question: {}
-
-Answer the question using ONLY the context above. Be concise and direct.""".format(context, user_query)
+    user_content = "Context from IST knowledge base:\n---\n{}\n---\n".format(context)
+    if history_text:
+        user_content += "\nConversation so far:\n{}\n\n".format(history_text)
+    user_content += "Caller's current question: {}\n\nAnswer using ONLY the context above. Be concise and direct.".format(user_query)
 
     messages.append({"role": "user", "content": user_content})
 
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",
             messages=messages,
             temperature=0.3,
-            max_tokens=300,
+            max_tokens=200,
         )
         answer = response.choices[0].message.content.strip()
     except Exception as e:
