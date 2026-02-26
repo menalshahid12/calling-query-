@@ -1,6 +1,5 @@
 """
-Text-to-Speech via Edge TTS. Each call produces a unique file so
-concurrent sessions never overwrite each other.
+Text-to-Speech via Edge TTS. Generates MP3 files with unique names per session.
 """
 
 import os, uuid, asyncio
@@ -9,18 +8,18 @@ AUDIO_DIR = os.path.join(os.path.dirname(__file__), "static", "audio")
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
 VOICE = "en-US-JennyNeural"
-RATE = "+10%"
 
 
-async def _synthesize(text: str, filepath: str):
+async def _synthesize(text: str, output_path: str):
     import edge_tts
-    communicate = edge_tts.Communicate(text, VOICE, rate=RATE)
-    await communicate.save(filepath)
+
+    communicate = edge_tts.Communicate(text, VOICE, rate="+10%")
+    await communicate.save(output_path)
 
 
 def synthesize(text: str, session_id: str = "") -> str:
     filename = f"{session_id}_{uuid.uuid4().hex[:8]}.mp3"
-    filepath = os.path.join(AUDIO_DIR, filename)
+    output_path = os.path.join(AUDIO_DIR, filename)
 
     loop = None
     try:
@@ -31,21 +30,16 @@ def synthesize(text: str, session_id: str = "") -> str:
     if loop and loop.is_running():
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor() as pool:
-            future = pool.submit(asyncio.run, _synthesize(text, filepath))
-            future.result()
+            future = pool.submit(asyncio.run, _synthesize(text, output_path))
+            future.result(timeout=30)
     else:
-        asyncio.run(_synthesize(text, filepath))
+        asyncio.run(_synthesize(text, output_path))
 
     return f"/static/audio/{filename}"
 
 
-def cleanup_old_audio(max_age_seconds: int = 600):
-    import time
-    now = time.time()
-    for fname in os.listdir(AUDIO_DIR):
-        fpath = os.path.join(AUDIO_DIR, fname)
-        try:
-            if now - os.path.getmtime(fpath) > max_age_seconds:
-                os.unlink(fpath)
-        except Exception:
-            pass
+GREETING_TEXT = "Hello, this is the Institute of Space Technology. How can I help you today?"
+
+
+def get_greeting(session_id: str = "") -> str:
+    return synthesize(GREETING_TEXT, session_id)
