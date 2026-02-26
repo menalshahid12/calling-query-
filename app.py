@@ -42,13 +42,19 @@ def health():
 
 @app.route("/api/start", methods=["POST"])
 def start_call():
-    session_id = sm.create_session()
-    audio_url = tts.get_greeting(session_id)
-    return jsonify({
-        "session_id": session_id,
-        "audio_url": audio_url,
-        "message": "Call started",
-    })
+    try:
+        session_id = sm.create_session()
+        audio_url = tts.get_greeting(session_id)
+        return jsonify({
+            "session_id": session_id,
+            "audio_url": audio_url,
+            "message": "Call started",
+        })
+    except Exception as e:
+        import traceback
+        print("[APP] /api/start error:", e)
+        traceback.print_exc()
+        return jsonify({"error": "Server is busy. Please try again in a moment."}), 503
 
 
 @app.route("/api/query", methods=["POST"])
@@ -71,7 +77,10 @@ def handle_query():
         return jsonify({"error": "Could not understand audio", "retry": True}), 200
 
     if sm.is_end_call(user_text):
-        goodbye_url = tts.synthesize(GOODBYE_TEXT, session_id)
+        try:
+            goodbye_url = tts.synthesize(GOODBYE_TEXT, session_id)
+        except Exception:
+            goodbye_url = tts._ensure_silent_audio() or "/static/audio/" + tts.GREETING_FILE
         sm.add_turn(session_id, user_text, GOODBYE_TEXT)
         sm.end_session(session_id)
         metrics = sm.get_metrics(session_id)
@@ -88,7 +97,10 @@ def handle_query():
         if phone:
             sm.save_phone(session_id, phone)
             reply = f"Thank you! I've noted your number {phone}. The admissions office will call you back soon. Is there anything else I can help you with?"
-            reply_url = tts.synthesize(reply, session_id)
+            try:
+                reply_url = tts.synthesize(reply, session_id)
+            except Exception:
+                reply_url = tts._ensure_silent_audio() or "/static/audio/" + tts.GREETING_FILE
             sm.add_turn(session_id, user_text, reply)
             return jsonify({
                 "text": reply,
@@ -114,7 +126,11 @@ def handle_query():
     if is_escalation:
         sm.mark_escalated(session_id)
 
-    audio_url = tts.synthesize(answer, session_id)
+    try:
+        audio_url = tts.synthesize(answer, session_id)
+    except Exception as e:
+        print("[APP] TTS synthesize error:", e)
+        audio_url = tts._ensure_silent_audio() or "/static/audio/" + tts.GREETING_FILE
     sm.add_turn(session_id, user_text, answer)
 
     return jsonify({
@@ -130,6 +146,8 @@ def handle_query():
 with app.app_context():
     print("[APP] Initializing knowledge base...")
     kb.init_kb()
+    print("[APP] Ensuring greeting audio...")
+    tts.ensure_greeting_audio()
     print("[APP] Ready.")
 
 
